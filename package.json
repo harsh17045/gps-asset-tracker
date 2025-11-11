@@ -1,0 +1,16 @@
+{
+  "name": "asset-sensor-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple Node server and web page to visualize ESP8266 sensor data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
+
+

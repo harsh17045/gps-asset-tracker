@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Asset Sensor Dashboard</title>
+	<link
+		rel="stylesheet"
+		href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+		integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+		crossorigin=""
+	/>
+	<style>
+		:root {
+			--bg: #0b1020;
+			--card: #141a2a;
+			--text: #e8eefc;
+			--subtle: #9fb0d0;
+			--accent: #4da3ff;
+			--ok: #12b981;
+			--warn: #f59e0b;
+			--err: #ef4444;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+				Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+			background: radial-gradient(1200px 800px at 20% -20%, #1a2250, transparent), var(--bg);
+			color: var(--text);
+		}
+		header {
+			padding: 20px;
+			border-bottom: 1px solid #1f2945;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+		}
+		.title {
+			font-size: 18px;
+			font-weight: 600;
+			letter-spacing: 0.2px;
+		}
+		.status {
+			font-size: 12px;
+			color: var(--subtle);
+		}
+		.container {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 16px;
+			padding: 16px;
+		}
+		.card {
+			background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.0));
+			border: 1px solid #212a46;
+			border-radius: 12px;
+			padding: 14px;
+			box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+		}
+		.card h2 {
+			margin: 0 0 10px 0;
+			font-size: 15px;
+			font-weight: 600;
+			color: var(--subtle);
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
+		.card.orientation {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding-bottom: 22px;
+			position: relative;
+			overflow: hidden;
+			background:
+				radial-gradient(120% 90% at 50% -30%, rgba(77,163,255,0.18), transparent),
+				linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+		}
+		.card.orientation::after {
+			content: "";
+			position: absolute;
+			inset: 18px;
+			border: 1px solid rgba(77,163,255,0.28);
+			border-radius: 12px;
+			pointer-events: none;
+		}
+		.metrics {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 12px;
+		}
+		.metric {
+			background: rgba(77,163,255,0.06);
+			border: 1px solid #223458;
+			border-radius: 10px;
+			padding: 10px 12px;
+		}
+		.metric .label {
+			font-size: 12px;
+			color: var(--subtle);
+		}
+		.metric .value {
+			margin-top: 6px;
+			font-size: 22px;
+			font-weight: 700;
+			letter-spacing: 0.3px;
+		}
+		#map {
+			width: 100%;
+			height: 420px;
+			border-radius: 10px;
+			border: 1px solid #223458;
+			overflow: hidden;
+		}
+		@media (max-width: 900px) {
+			.container { grid-template-columns: 1fr; }
+			#map { height: 320px; }
+			.orientation-meta {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+		}
+		@media (max-width: 520px) {
+			.orientation-meta {
+				grid-template-columns: 1fr;
+			}
+		}
+		.badge {
+			display: inline-block;
+			padding: 2px 8px;
+			border-radius: 999px;
+			font-size: 11px;
+			border: 1px solid #223458;
+			background: rgba(255,255,255,0.04);
+			color: var(--subtle);
+		}
+		.legend {
+			margin-top: 8px;
+			font-size: 12px;
+			color: var(--subtle);
+		}
+		a { color: var(--accent); text-decoration: none; }
+		#cube-container {
+			width: 220px;
+			height: 220px;
+			perspective: 700px;
+			margin-top: 10px;
+		}
+		#cube {
+			width: 100%;
+			height: 100%;
+			position: relative;
+			transform-style: preserve-3d;
+			transition: transform 0.18s ease-out;
+			filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.35));
+		}
+		#cube::before,
+		#cube::after {
+			content: "";
+			position: absolute;
+			inset: -18px;
+			border: 1px dashed rgba(77, 163, 255, 0.18);
+			border-radius: 18px;
+		}
+		#cube::after {
+			inset: -32px;
+			border-style: solid;
+			opacity: 0.16;
+		}
+		.face {
+			position: absolute;
+			width: 220px;
+			height: 220px;
+			background: rgba(77, 163, 255, 0.16);
+			border: 2px solid rgba(255, 255, 255, 0.22);
+			border-radius: 12px;
+			backdrop-filter: blur(6px);
+		}
+		.face.front { transform: translateZ(110px); }
+		.face.back { transform: rotateY(180deg) translateZ(110px); }
+		.face.right { transform: rotateY(90deg) translateZ(110px); }
+		.face.left { transform: rotateY(-90deg) translateZ(110px); }
+		.face.top { transform: rotateX(90deg) translateZ(110px); }
+		.face.bottom { transform: rotateX(-90deg) translateZ(110px); }
+		.axis-label {
+			position: absolute;
+			font-size: 11px;
+			color: rgba(232, 238, 252, 0.7);
+			text-transform: uppercase;
+			letter-spacing: 0.8px;
+			pointer-events: none;
+		}
+		.axis-label.x { top: 50%; left: -40px; transform: translateY(-50%) rotate(-90deg); }
+		.axis-label.y { top: -30px; left: 50%; transform: translateX(-50%); }
+		.axis-label.z { bottom: -30px; left: 50%; transform: translateX(-50%); }
+		.orientation-meta {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 12px;
+			margin-top: 24px;
+			width: 92%;
+			max-width: 280px;
+		}
+		.orientation-chip {
+			background: rgba(9, 16, 32, 0.65);
+			border: 1px solid rgba(77,163,255,0.35);
+			border-radius: 12px;
+			padding: 10px 12px;
+			text-align: center;
+			box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+		}
+		.orientation-chip .key {
+			font-size: 11px;
+			color: rgba(232,238,252,0.65);
+			text-transform: uppercase;
+			letter-spacing: 0.6px;
+		}
+		.orientation-chip .val {
+			margin-top: 6px;
+			font-size: 20px;
+			font-weight: 600;
+			color: var(--text);
+		}
+		.orientation-data {
+			margin-top: 18px;
+			font-size: 15px;
+			background: rgba(10, 22, 40, 0.72);
+			padding: 12px 18px;
+			border-radius: 12px;
+			text-align: center;
+			border: 1px solid rgba(77,163,255,0.28);
+			min-width: 210px;
+			box-shadow: inset 0 0 18px rgba(77,163,255,0.12);
+			line-height: 1.6;
+		}
+		.orientation-note {
+			display: inline-block;
+			margin-top: 4px;
+			font-size: 12px;
+			color: rgba(232,238,252,0.6);
+		}
+		#alerts-container {
+			min-height: 60px;
+		}
+		.no-alerts {
+			color: var(--subtle);
+			font-size: 14px;
+			text-align: center;
+			padding: 20px;
+		}
+		.alert-item {
+			background: rgba(239, 68, 68, 0.1);
+			border-left: 3px solid var(--err);
+			border-radius: 6px;
+			padding: 10px 14px;
+			margin-bottom: 8px;
+			font-size: 14px;
+			line-height: 1.5;
+			animation: slideIn 0.3s ease-out;
+		}
+		.alert-item.warning {
+			background: rgba(245, 158, 11, 0.1);
+			border-left-color: var(--warn);
+		}
+		.alert-item.info {
+			background: rgba(77, 163, 255, 0.1);
+			border-left-color: var(--accent);
+		}
+		@keyframes slideIn {
+			from {
+				opacity: 0;
+				transform: translateX(-10px);
+			}
+			to {
+				opacity: 1;
+				transform: translateX(0);
+			}
+		}
+	</style>
+</head>
+<body>
+	<header>
+		<div class="title">Asset Sensor Dashboard</div>
+		<div class="status">
+			<span id="health" class="badge">Checking server...</span>
+		</div>
+	</header>
+
+	<div class="container">
+		<div class="card">
+			<h2>Live Metrics</h2>
+			<div class="metrics">
+				<div class="metric">
+					<div class="label">Temperature</div>
+					<div id="temp" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Humidity</div>
+					<div id="hum" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Latitude</div>
+					<div id="lat" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Longitude</div>
+					<div id="lon" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Intensity</div>
+					<div id="intensity" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Speed</div>
+					<div id="speed" class="value">—</div>
+				</div>
+				<div class="metric">
+					<div class="label">Last Update</div>
+					<div id="updated" class="value">—</div>
+				</div>
+			</div>
+		<div class="legend">
+			Intensity uses GPS speed (m/s) when available, otherwise accelerometer-derived (m/s²).
+		</div>
+		</div>
+
+		<div class="card">
+			<h2>Location</h2>
+			<div id="map"></div>
+		</div>
+
+		<div class="card" id="alerts-card">
+			<h2>Alerts & Warnings</h2>
+			<div id="alerts-container">
+				<div class="no-alerts">No alerts at this time</div>
+			</div>
+		</div>
+
+		<div class="card orientation">
+			<h2>Device Orientation</h2>
+			<div id="cube-container">
+				<div id="cube">
+					<div class="face front"></div>
+					<div class="face back"></div>
+					<div class="face right"></div>
+					<div class="face left"></div>
+					<div class="face top"></div>
+					<div class="face bottom"></div>
+					<span class="axis-label x">X / Roll</span>
+					<span class="axis-label y">Y / Pitch</span>
+					<span class="axis-label z">Z</span>
+				</div>
+			</div>
+			<div class="orientation-meta">
+				<div class="orientation-chip">
+					<div class="key">Pitch</div>
+					<div class="val"><span id="pitch">—</span>°</div>
+				</div>
+				<div class="orientation-chip">
+					<div class="key">Roll</div>
+					<div class="val"><span id="roll">—</span>°</div>
+				</div>
+				<div class="orientation-chip">
+					<div class="key">Tilt</div>
+					<div class="val"><span id="tilt">—</span>°</div>
+				</div>
+			</div>
+			<div class="orientation-data">
+				<span id="stance-label">Status: —</span><br />
+				<span class="orientation-note">Stance updates as the device tips beyond thresholds.</span>
+			</div>
+		</div>
+	</div>
+
+	<script
+		src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+		integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+		crossorigin=""
+	></script>
+
+	<script>
+		const el = (id) => document.getElementById(id);
+
+		let map, marker;
+		let pathLine;
+		let pathPoints = [];
+		const cubeEl = document.getElementById('cube');
+		const pitchEl = el('pitch');
+		const rollEl = el('roll');
+		const tiltEl = el('tilt');
+		const stanceLabel = document.getElementById('stance-label');
+		let smoothPitch = null;
+		let smoothRoll = null;
+		const SMOOTH_ALPHA = 0.2;
+
+		function initMap() {
+			map = L.map('map', { zoomControl: true });
+
+			const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				maxZoom: 19,
+				attribution: '&copy; OSM'
+			});
+			tiles.addTo(map);
+
+			map.setView([20, 78], 4);
+
+			// Path line (red polyline)
+			pathLine = L.polyline([], { color: 'red', weight: 3 }).addTo(map);
+		}
+
+		function setMarker(lat, lon) {
+			const point = [lat, lon];
+
+			// Create or move marker
+			if (!marker) {
+				marker = L.marker(point).addTo(map);
+			} else {
+				marker.setLatLng(point);
+			}
+
+			// Append to path
+			pathPoints.push(point);
+			pathLine.setLatLngs(pathPoints);
+
+			// Center but keep zoom stable
+			map.setView(point, Math.max(map.getZoom(), 15), { animate: true });
+		}
+
+		async function checkHealth() {
+			try {
+				const res = await fetch('/health', { cache: 'no-store' });
+				el('health').textContent = res.ok ? 'Server: OK' : 'Server: Unhealthy';
+			} catch {
+				el('health').textContent = 'Server: Unreachable';
+			}
+		}
+
+		function fmtNum(v, digits = 2) {
+			if (v == null || Number.isNaN(v)) return '—';
+			return Number(v).toFixed(digits);
+		}
+
+		function fmtTime(ts) {
+			if (!ts) return '—';
+			return new Date(ts).toLocaleString();
+		}
+
+		async function loadLatest() {
+			try {
+				const res = await fetch('/api/latest', { cache: 'no-store' });
+				const json = await res.json();
+				const data = json.data;
+				if (!data) return;
+
+				el('temp').textContent = fmtNum(data.temperature, 1) + ' °C';
+				el('hum').textContent = fmtNum(data.humidity, 1) + ' %';
+
+				el('lat').textContent = data.lat != null ? fmtNum(data.lat, 6) : '—';
+				el('lon').textContent = data.lon != null ? fmtNum(data.lon, 6) : '—';
+
+				let unit = data.intensityUnit === 'm_s2' ? 'm/s²' : 'm/s';
+				el('intensity').textContent = data.intensity != null ? (fmtNum(data.intensity, 2) + ' ' + unit) : '—';
+
+				// Speed display (GPS speed in km/h)
+				if (data.intensityUnit === 'm_s' && data.intensity != null) {
+					const speedKmh = data.intensity * 3.6;
+					el('speed').textContent = fmtNum(speedKmh, 1) + ' km/h';
+				} else {
+					el('speed').textContent = '—';
+				}
+
+				el('updated').textContent = fmtTime(data.timestamp);
+
+				// Display alerts
+				const alertsContainer = el('alerts-container');
+				if (data.alerts && Array.isArray(data.alerts) && data.alerts.length > 0) {
+					alertsContainer.innerHTML = '';
+					data.alerts.forEach(alert => {
+						const alertDiv = document.createElement('div');
+						alertDiv.className = 'alert-item';
+						if (alert.includes('DANGEROUS') || alert.includes('critically') || alert.includes('impact')) {
+							// Critical - already default red
+						} else if (alert.includes('High') || alert.includes('low') || alert.includes('tilted')) {
+							alertDiv.classList.add('warning');
+						} else {
+							alertDiv.classList.add('info');
+						}
+						alertDiv.textContent = alert;
+						alertsContainer.appendChild(alertDiv);
+					});
+				} else {
+					alertsContainer.innerHTML = '<div class="no-alerts">No alerts at this time</div>';
+				}
+
+				const pitchRaw = typeof data.pitch === 'number' && Number.isFinite(data.pitch) ? data.pitch : null;
+				const rollRaw = typeof data.roll === 'number' && Number.isFinite(data.roll) ? data.roll : null;
+
+				if (pitchRaw !== null) {
+					smoothPitch =
+						smoothPitch === null ? pitchRaw : smoothPitch + SMOOTH_ALPHA * (pitchRaw - smoothPitch);
+				} else {
+					smoothPitch = null;
+				}
+
+				if (rollRaw !== null) {
+					smoothRoll =
+						smoothRoll === null ? rollRaw : smoothRoll + SMOOTH_ALPHA * (rollRaw - smoothRoll);
+				} else {
+					smoothRoll = null;
+				}
+
+				const pitchVal = smoothPitch !== null ? smoothPitch : pitchRaw;
+				const rollVal = smoothRoll !== null ? smoothRoll : rollRaw;
+
+				if (pitchEl) pitchEl.textContent = pitchVal !== null ? fmtNum(pitchVal, 2) : '—';
+				if (rollEl) rollEl.textContent = rollVal !== null ? fmtNum(rollVal, 2) : '—';
+
+				let tilt = null;
+				if (pitchVal !== null && rollVal !== null) {
+					tilt = Math.sqrt(pitchVal * pitchVal + rollVal * rollVal);
+					if (tiltEl) tiltEl.textContent = fmtNum(tilt, 2);
+				} else if (tiltEl) {
+					tiltEl.textContent = '—';
+				}
+
+				if (cubeEl) {
+					if (pitchVal !== null && rollVal !== null) {
+						cubeEl.style.transform = `rotateX(${pitchVal}deg) rotateZ(${rollVal}deg)`;
+					} else {
+						cubeEl.style.transform = 'rotateX(0deg) rotateZ(0deg)';
+					}
+				}
+
+				if (stanceLabel) {
+					let status = 'Status: —';
+					if (tilt !== null) {
+						if (tilt < 5) status = 'Status: Level';
+						else if (tilt < 15) status = 'Status: Slight tilt';
+						else if (tilt < 30) status = 'Status: Tilting';
+						else status = 'Status: Critical tilt';
+					}
+					stanceLabel.textContent = status;
+				}
+
+				if (typeof data.lat === 'number' && typeof data.lon === 'number') {
+					setMarker(data.lat, data.lon);
+				}
+
+			} catch (err) {
+				console.error('Failed to load latest:', err);
+			}
+		}
+
+		(async function boot() {
+			initMap();
+			await checkHealth();
+			await loadLatest();
+
+			setInterval(loadLatest, 2000);
+			setInterval(checkHealth, 10000);
+		})();
+	</script>
+</body>
+</html>
