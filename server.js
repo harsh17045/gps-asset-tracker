@@ -144,8 +144,11 @@ app.post('/api/readings', (req, res) => {
 			}
 
 			const total = Math.sqrt(axAbs * axAbs + ayAbs * ayAbs + azAbs * azAbs);
-			// More sensitive: trigger at lower impact threshold (was 25000)
-			if (total > 15000) {
+			// Impact detection: only trigger if significantly above normal 1g baseline
+			// Normal still reading is ~16384 LSB (1g), so we need > 25000 (1.5g+) for real impacts
+			const baseline = 16384; // 1g in LSB
+			const impactThreshold = 25000; // ~1.5g - only real impacts exceed this
+			if (total > impactThreshold) {
 				alerts.push('💥 Sudden impact/shock detected!');
 			}
 		}
