@@ -174,6 +174,6 @@ app.get('/api/latest', (_req, res) => {
 // Health
 app.get('/health', (_req, res) => res.status(200).send('OK'));
 
-app.listen(PORT, '10.139.30.53', () => {
+app.listen(PORT, '0.0.0.0', () => {
 	console.log(`Server listening on http://10.139.30.53:${PORT}`);
 });
